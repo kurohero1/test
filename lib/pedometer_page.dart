@@ -269,10 +269,8 @@ class _PedometerPageState extends State<PedometerPage> {
                                       showTitles: true,
                                       getTitlesWidget: (value, meta) {
                                         DateTime day = DateTime.now().subtract(Duration(days: 6 - value.toInt()));
-                                        return SideTitleWidget(
-                                          axisSide: meta.axisSide,
-                                          child: Text("${day.month}/${day.day}", style: TextStyle(fontSize: 12)),
-                                        );
+                                        return Text("${day.month}/${day.day}", style: TextStyle(fontSize: 12));
+                                        
                                       },
                                     ),
                                   ),
