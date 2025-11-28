@@ -4,6 +4,7 @@ import 'package:pedometer/pedometer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:async';
+import 'package:fl_chart/fl_chart.dart'; // 追加：グラフ用
 
 class PedometerPage extends StatefulWidget {
   @override
@@ -151,6 +152,36 @@ class _PedometerPageState extends State<PedometerPage> {
     await prefs.setDouble("step_length", _stepLength);
   }
 
+  /// 過去7日間の距離データを作成（fl_chart 0.60+対応）
+  List<BarChartGroupData> _getLast7DaysDistanceData() {
+  List<BarChartGroupData> list = [];
+  DateTime today = DateTime.now();
+
+  for (int i = 6; i >= 0; i--) {
+    DateTime day = today.subtract(Duration(days: i));
+    String key = "${day.year}-${day.month}-${day.day}";
+    int steps = _history[key] ?? 0;
+    double distanceKm = steps * _stepLength / 1000;
+
+    list.add(
+      BarChartGroupData(
+        x: 6 - i,
+        barRods: [
+          BarChartRodData(
+            toY: distanceKm,                     // 旧 y → 新 toY
+            color: Colors.blueAccent,            // 旧 colors → 新 color
+            width: 16,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  return list;
+}
+
+
   @override
   Widget build(BuildContext context) {
     int displaySteps = _rawSteps - _baselineSteps;
@@ -185,39 +216,12 @@ class _PedometerPageState extends State<PedometerPage> {
                       style: TextStyle(fontSize: 18, color: Colors.grey[700]),
                       textAlign: TextAlign.center,
                     ),
-                    SizedBox(height: 30),
-
-                    // 手動更新ボタン
-                    ElevatedButton(
-                      onPressed: _refreshSteps,
-                      child: Text("更新"),
-                    ),
-                    SizedBox(height: 10),
-                    // リセットボタン
-                    ElevatedButton(
-                      onPressed: _resetSteps,
-                      child: Text("歩数をリセット（再計算）"),
-                    ),
-                    SizedBox(height: 10),
-                    // 今日の歩数保存
-                    ElevatedButton(
-                      onPressed: _saveTodaySteps,
-                      child: Text("本日の歩数を履歴に保存"),
-                    ),
-                    SizedBox(height: 10),
-                    // 権限再取得 / 歩数計再起動
-                    ElevatedButton(
-                      onPressed: _requestPermissionAndInitPedometer,
-                      child: Text("権限を再リクエスト / 歩数計を再起動"),
-                    ),
-
                     SizedBox(height: 20),
                     // 歩距Slider
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: 30),
                       child: Column(
                         children: [
-                          // 現在の歩距表示
                           Text(
                             "歩距: ${_stepLength.toStringAsFixed(2)} m",
                             style: TextStyle(fontSize: 18),
@@ -235,35 +239,60 @@ class _PedometerPageState extends State<PedometerPage> {
                         ],
                       ),
                     ),
+                    SizedBox(height: 20),
+                    // ボタン群
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        ElevatedButton(onPressed: _refreshSteps, child: Text("更新")),
+                        ElevatedButton(onPressed: _resetSteps, child: Text("リセット")),
+                        ElevatedButton(onPressed: _saveTodaySteps, child: Text("保存")),
+                      ],
+                    ),
+                    SizedBox(height: 30),
+                    // ===== 過去7日間の距離グラフ =====
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: [
+                          Text("過去7日間の距離 (km)",
+                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                          SizedBox(
+                            height: 200,
+                            child: BarChart(
+                              BarChartData(
+                                alignment: BarChartAlignment.spaceAround,
+                                maxY: (_getLast7DaysDistanceData().map((e) => e.barRods.first.toY).fold(0.0, (a,b)=>a>b?a:b) * 1.2),
+                                titlesData: FlTitlesData(
+                                  bottomTitles: AxisTitles(
+                                    sideTitles: SideTitles(
+                                      showTitles: true,
+                                      getTitlesWidget: (value, meta) {
+                                        DateTime day = DateTime.now().subtract(Duration(days: 6 - value.toInt()));
+                                        return SideTitleWidget(
+                                          axisSide: meta.axisSide,
+                                          child: Text("${day.month}/${day.day}", style: TextStyle(fontSize: 12)),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  leftTitles: AxisTitles(
+                                    sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+                                  ),
+                                ),
+                                borderData: FlBorderData(show: false),
+                                barGroups: _getLast7DaysDistanceData(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
           ),
-
-          // 歩数履歴表示
-          Container(
-            padding: EdgeInsets.all(16),
-            color: Colors.grey[200],
-            child: Column(
-              children: [
-                Text("歩数履歴",
-                    style:
-                        TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                SizedBox(height: 10),
-                _history.isEmpty
-                    ? Text("まだ履歴がありません")
-                    : Column(
-                        children: _history.entries.map((entry) {
-                          return ListTile(
-                            title: Text("${entry.key}"),
-                            trailing: Text("${entry.value} 歩"),
-                          );
-                        }).toList(),
-                      ),
-              ],
-            ),
-          )
         ],
       ),
     );
